@@ -1,0 +1,599 @@
+
+def readFile(instructList):
+    oneLine = []
+    file = open("Instruction Set.txt", "r")
+    for line in file:
+        inst = line.replace(',','')
+        x = inst.split()
+        
+        instructList.append(x)
+       
+    file.close()
+    
+def createBoard(instructList, scoreBoard):
+    file = open("Instruction Set.txt", "r")
+    firstRow = ["Instruction", "Issue", "Read", "Execution", "Write"]
+    scoreBoard.append(firstRow)
+    row = ["", "", "", "", "", "", "", ""]
+    for x in file:
+        row = ["", "", "", "", ""]
+        x = x.strip()
+        row[0] = x
+        scoreBoard.append(row)
+        
+        
+        
+def displayBoard(scoreBoard):
+    for i in  range(len(scoreBoard)):
+        print(scoreBoard[i])
+        
+        
+def createRegisters(floatRegister, intRegister):
+    firstLetter = "F"
+    index = 0
+    fullword = ""
+    for i in range(32):
+        element = ["" , 0.0, 0, 0]
+        fullword = firstLetter + str(i)
+        element[0] = fullword
+        floatRegister.append(element)
+        fullword = ""
+    firstLetter = "$"
+    index = 0
+    fullword = ""
+    for i in range(32):
+        element = ["" , 0.0, 0, 0]
+        fullword = firstLetter + str(i)
+        element[0] = fullword
+        intRegister.append(element)
+        fullword = ""
+    
+        
+def algorithm(scoreBoard, instruction, floatRegister, intRegister, memoryData):
+    #busy values for strucutral hazards
+    integer = 0
+    add = 0
+    sub = 0
+    mul = 0
+    div = 0
+    
+    #values for number of cycles to accomplish
+    FPadder = 2
+    FPmult = 10
+    FPdiv = 40
+    intUnit = 1
+    
+    #initialize current instruction
+    currentInstr = instruction[0][0]
+            
+    
+    index = 1 #row count
+    k = 1 #col count
+    c = 1 #cycle count
+    dest = instruction[0][0]
+    src1 = instruction[0][1]
+    src2 = instruction[0][2]
+    currentIssue = 1  #current issue Iam in
+    i = 0
+    
+    while(i < len(instruction)):
+        #next instruction
+        currentInstr = instruction[i][0]
+        
+        #this is for the thing
+        dest = instruction[i][1]   #this is for the L.D and S.D to have
+        if(currentInstr != "L.D" and currentInstr != "S.D"):
+            dest = instruction[i][1]
+            src1 = instruction[i][2]
+            src2 = instruction[i][3]
+        
+        
+       
+        c = currentIssue
+        #find register index for dest, src1, src2
+        y = 0 
+        j = 0  #dest
+        a = 0  #src
+        b = 0  #src2
+        if(currentInstr != "ADDI" and currentInstr != "ADD" and currentInstr != "SUB"):
+            for y in range(32):
+                if (dest == floatRegister[y][0]):
+                    #save j as the index for the register
+                    j = y
+                if (src1 == floatRegister[y][0]):
+                    a = y
+                if (src2 == floatRegister[y][0]):
+                    b = y
+        else:
+            for y in range(32):
+                if (dest == intRegister[y][0]):
+                    #save j as the index for the register
+                    j = y
+                if (src1 == intRegister[y][0]):
+                    a = y
+                if (src2 == intRegister[y][0]):
+                    b = y
+        
+        
+        
+        if(currentInstr == "ADDI" or currentInstr == "ADD" or currentInstr == "SUB"): 
+            #do the sequence for integer part = > set conditions
+            if(currentIssue < integer or intRegister[j][2] > currentIssue):
+                    
+                if(integer > intRegister[j][2]):
+                    currentIssue = integer + 1
+                    c = currentIssue
+                else:
+                    currentIssue = intRegister[j][2] + 1
+                    c = currentIssue
+        
+            #check for structural hazards and WAW hazards
+            if(currentIssue > integer and intRegister[j][2] < currentIssue):
+                #passes the WAW and struc hazard test
+                scoreBoard[index][k] = currentIssue
+                #save currentIssue for next wave
+                currentIssue = currentIssue + 1
+                #do the algorithm now
+                #read part
+                k = k + 1
+                c = c + 1 #next cycle by 1
+                #check for RAW hazards
+                #if one source has a greater end count then do the algorithm
+                if (intRegister[a][2] > c or intRegister[b][2] > c):
+                    if(intRegister[a][2] > intRegister[b][2]):
+                        c = intRegister[a][2] + 1
+                    else: 
+                        c = intRegister[b][2] + 1
+                
+                if (intRegister[a][2] < c and intRegister[b][2] < c):
+                    scoreBoard[index][k] = c 
+                    if(c > intRegister[a][3]):
+                        floatRegister[a][3] = c
+                    if(c > intRegister[b][3]):
+                        floatRegister[b][3] = c
+                    #after read do the ex part
+                    k = k + 1
+                    c = c + intUnit
+                    scoreBoard[index][k] = c 
+                    doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                    
+                
+                    #after ex part do the wb part (check for WAR)
+                    k = k + 1
+                    c = c + 1 #final ex value
+                    if(c < intRegister[j][3]):
+                        c = intRegister[j][3] + 1
+                    if(c > intRegister[j][3]):
+                        scoreBoard[index][k] = c
+                        #update value for the Register and Functional done
+                        integer = c
+                        intRegister[j][2] = c
+        
+        #special case for L.D and S.D
+        elif(currentInstr == "L.D" or currentInstr == "S.D"):
+            if(currentInstr == "L.D"):
+                #use only 1 source
+                #do the sequence for integer part = > set conditions
+                if(currentIssue < integer or floatRegister[j][2] > currentIssue):
+                    if( currentIssue < integer):
+                        currentIssue = integer + 1
+                        c = currentIssue
+                
+                    elif( floatRegister[j][2] > currentIssue ):
+                        currentIssue = floatRegister[j][2] + 1
+                        c = currentIssue
+        
+                #check for structural hazards and WAW hazards
+                if(currentIssue > integer and floatRegister[j][2] < currentIssue):
+                    #passes the WAW and struc hazard test
+                    scoreBoard[index][k] = currentIssue
+                    #save currentIssue for next wave
+                    currentIssue = currentIssue + 1
+                    #do the algorithm now
+                    #read part
+                    k = k + 1
+                    c = c + 1 #next cycle by 1
+                    #check for RAW hazards
+                    if(floatRegister[a][2] > c):
+                        c = floatRegister[a][2] + 1
+                    if (floatRegister[a][2] < c):
+                        scoreBoard[index][k] = c 
+                        if(c > floatRegister[a][3]):
+                            floatRegister[a][3] = c
+                    
+                        #after read do the ex part
+                        k = k + 1
+                        c = c + intUnit
+                        scoreBoard[index][k] = c
+                        doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                
+                        #after ex part do the wb part (check for WAR)
+                        k = k + 1
+                        c = c + 1 #final ex value
+                        if(c < floatRegister[j][3]):
+                            c = floatRegister[j][3] + 1
+                        if(c > floatRegister[j][3]):
+                            scoreBoard[index][k] = c
+                            #update value for the Register and Functional done
+                            integer = c
+                            floatRegister[j][2] = c
+                
+            elif(currentInstr == "S.D"):
+                #forget about WAW and WAR
+                #use only 1 source
+                dest = instruction[0][0]
+                src1 = instruction[0][1]
+                src2 = instruction[0][2]
+                #do the sequence for integer part = > set conditions
+                if(currentIssue < integer):
+                    if( currentIssue < integer):
+                        currentIssue = integer + 1
+                        c = currentIssue
+        
+                #check for structural hazards 
+                if(currentIssue > integer):
+                    #passes the WAW and struc hazard test
+                    scoreBoard[index][k] = currentIssue
+                    #save currentIssue for next wave
+                    currentIssue = currentIssue + 1
+                    #do the algorithm now
+                    #read part
+                    k = k + 1
+                    c = c + 1 #next cycle by 1
+                    #check for RAW hazards
+                    if(floatRegister[j][2] > c):
+                        c = floatRegister[j][2] + 1
+                    if (floatRegister[j][2] < c):
+                        
+                        scoreBoard[index][k] = c 
+                        if(c > floatRegister[j][3]):
+                            floatRegister[j][3] = c
+                    
+                        #after read do the ex part
+                        k = k + 1
+                        c = c + intUnit
+                        scoreBoard[index][k] = c 
+                        doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                        
+                
+                        #after ex part do the wb part (check for WAR)
+                        k = k + 1
+                        c = c + 1 #final ex value
+                        scoreBoard[index][k] = c
+                            
+                
+                        
+        elif(currentInstr == "ADD.D"):
+            
+            #print(floatRegister[j][2])
+            #do the sequence for integer part = > set conditions
+            if(currentIssue < add or floatRegister[j][2] > currentIssue):
+                if(add > floatRegister[j][2]):
+                    currentIssue = add + 1
+                    c = currentIssue
+                else:
+                    currentIssue = floatRegister[j][2] + 1
+                    c = currentIssue
+        
+            #check for structural hazards and WAW hazards
+            if(currentIssue > add and floatRegister[j][2] < currentIssue):
+                #passes the WAW and struc hazard test
+                scoreBoard[index][k] = currentIssue
+                #save currentIssue for next wave
+                currentIssue = currentIssue + 1
+                #do the algorithm now
+                #read part
+                k = k + 1
+                c = c + 1 #next cycle by 1
+                #check for RAW hazards
+                
+                if (floatRegister[a][2] > c or floatRegister[b][2] > c):
+                    if(floatRegister[a][2] > floatRegister[b][2]):
+                        c = floatRegister[a][2] + 1
+                    else: 
+                        c = floatRegister[b][2] + 1
+                
+                if (floatRegister[a][2] < c and floatRegister[b][2] < c):
+                    scoreBoard[index][k] = c 
+                    
+                    #after read assign the values to the float register read part for src
+                    
+                    #make sure current src is greater than one already there
+                    if(c > floatRegister[a][3]):
+                        floatRegister[a][3] = c
+                    if(c > floatRegister[b][3]):
+                        floatRegister[b][3] = c
+                    #after read do the ex part
+                    k = k + 1
+                    
+                    c = c + FPadder
+                    scoreBoard[index][k] = c 
+                    doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                    
+                    
+                    
+                
+                    #after ex part do the wb part (check for WAR)
+                    k = k + 1
+                    c = c + 1 #final ex value
+                    
+                    if(c < floatRegister[j][3]):
+                        c = floatRegister[j][3] + 1
+                    if(c > floatRegister[j][3]):
+                        scoreBoard[index][k] = c
+                        #update value for the Register and Functional done
+                        add = c
+                        floatRegister[j][2] = c
+            
+        elif(currentInstr == "SUB.D"):
+            #do the sequence for integer part = > set conditions
+            if(currentIssue < sub or floatRegister[j][2] > sub):
+                if(sub > floatRegister[j][2]):
+                    currentIssue = sub + 1
+                    c = currentIssue
+                else:
+                    currentIssue = floatRegister[j][2] + 1
+                    c = currentIssue
+        
+            #check for structural hazards and WAW hazards
+            if(currentIssue > sub and floatRegister[j][2] < currentIssue):
+                #passes the WAW and struc hazard test
+                scoreBoard[index][k] = currentIssue
+                #save currentIssue for next wave
+                currentIssue = currentIssue + 1
+                #do the algorithm now
+                #read part
+                k = k + 1
+                c = c + 1 #next cycle by 1
+                #check for RAW hazards
+                
+                if (floatRegister[a][2] > c or floatRegister[b][2] > c):
+                    if(floatRegister[a][2] > floatRegister[b][2]):
+                        c = floatRegister[a][2] + 1
+                    else: 
+                        c = floatRegister[b][2] + 1
+                
+                if (floatRegister[a][2] < c and floatRegister[b][2] < c):
+                    scoreBoard[index][k] = c 
+                    if(c > floatRegister[a][3]):
+                        floatRegister[a][3] = c
+                    if(c > floatRegister[b][3]):
+                        floatRegister[b][3] = c
+                    #after read do the ex part
+                    k = k + 1
+                    c = c + FPadder
+                    scoreBoard[index][k] = c 
+                    doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                    
+                
+                    #after ex part do the wb part (check for WAR)
+                    k = k + 1
+                    c = c + 1 #final ex value
+                    if(c < floatRegister[j][3]):
+                        c = floatRegister[j][3] + 1
+                    if(c > floatRegister[j][3]):
+                        scoreBoard[index][k] = c
+                        #update value for the Register and Functional done
+                        sub = c
+                        floatRegister[j][2] = c
+            
+        elif(currentInstr == "MUL.D"):
+            #do the sequence for integer part = > set conditions
+            if(currentIssue < mul or floatRegister[j][2] > currentIssue):
+                if(mul > floatRegister[j][2]):
+                    currentIssue = mul + 1
+                    c = currentIssue
+                else:
+                    currentIssue = floatRegister[j][2] + 1
+                    c = currentIssue
+        
+            #check for structural hazards and WAW hazards
+            if(currentIssue > mul and floatRegister[j][2] < currentIssue):
+                #passes the WAW and struc hazard test
+                scoreBoard[index][k] = currentIssue
+                #save currentIssue for next wave
+                currentIssue = currentIssue + 1
+                #do the algorithm now
+                #read part
+                k = k + 1
+                c = c + 1 #next cycle by 1
+                #check for RAW hazards
+                
+                if (floatRegister[a][2] > c or floatRegister[b][2] > c):
+                    if(floatRegister[a][2] > floatRegister[b][2]):
+                        c = floatRegister[a][2] + 1
+                    else: 
+                        c = floatRegister[b][2] + 1
+                
+                if (floatRegister[a][2] < c and floatRegister[b][2] < c):
+                    scoreBoard[index][k] = c 
+                    if(c > floatRegister[a][3]):
+                        floatRegister[a][3] = c
+                    if(c > floatRegister[b][3]):
+                        floatRegister[b][3] = c
+                    #after read do the ex part
+                    k = k + 1
+                    c = c + FPmult
+                    scoreBoard[index][k] = c 
+                    doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                    
+                
+                    #after ex part do the wb part (check for WAR)
+                    k = k + 1
+                    c = c + 1 #final ex value
+                    if(c < floatRegister[j][3]):
+                        c = floatRegister[j][3] + 1
+                    if(c > floatRegister[j][3]):
+                        scoreBoard[index][k] = c
+                        #update value for the Register and Functional done
+                        mul = c
+                        floatRegister[j][2] = c
+            
+        elif(currentInstr == "DIV.D"):
+            #do the sequence for integer part = > set conditions
+            if(currentIssue < div or floatRegister[j][2] > currentIssue):
+                if(div > floatRegister[j][2]):
+                    currentIssue = div + 1
+                    c = currentIssue
+                else:
+                    currentIssue = floatRegister[j][2] + 1
+                    c = currentIssue
+        
+            #check for structural hazards and WAW hazards
+            if(currentIssue > div and floatRegister[j][2] < currentIssue):
+                #passes the WAW and struc hazard test
+                scoreBoard[index][k] = currentIssue
+                #save currentIssue for next wave
+                currentIssue = currentIssue + 1
+                #do the algorithm now
+                #read part
+                k = k + 1
+                c = c + 1 #next cycle by 1
+                #check for RAW hazards
+                
+                
+                if (floatRegister[a][2] > c or floatRegister[b][2] > c):
+                    if(floatRegister[a][2] > floatRegister[b][2]):
+                        c = floatRegister[a][2] + 1
+                    else: 
+                        c = floatRegister[b][2] + 1
+                        
+                if (floatRegister[a][2] < c and floatRegister[b][2] < c):
+                    scoreBoard[index][k] = c 
+                    if(c > floatRegister[a][3]):
+                        floatRegister[a][3] = c
+                    if(c > floatRegister[b][3]):
+                        floatRegister[b][3] = c
+                    #after read do the ex part
+                    k = k + 1
+                    c = c + FPdiv
+                    scoreBoard[index][k] = c 
+                    doInstruction(instruction[i], memoryData, floatRegister, intRegister)
+                    
+                
+                    #after ex part do the wb part (check for WAR)
+                    k = k + 1
+                    c = c + 1 #final ex value
+                    if(c < floatRegister[j][3]):
+                        c = floatRegister[j][3] + 1
+                    if(c > floatRegister[j][3]):
+                        scoreBoard[index][k] = c
+                        #update value for the Register and Functional done
+                        div = c
+                        floatRegister[j][2] = c
+            
+                
+        #update all the functions
+        index = index + 1 #row count
+        k = 1 #col count
+        c = c + 1
+        i = i + 1
+        
+        
+          #current issue Iam in
+            
+            
+def doInstruction(instruction, memData, floatData, intData):
+
+    if(instruction[0] == "L.D"):
+        val = getVal(instruction[2], memData, floatData, intData)
+        assignVal(val, instruction[1], memData, floatData, intData)
+    elif(instruction[0] == "S.D"):
+        val = getVal(instruction[1], memData, floatData, intData)
+        assignVal(val, instruction[2], memData, floatData, intData)
+    elif(instruction[0][0:3] == "ADD"):
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1+val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+    elif(instruction[0][0:3] == "SUB"):
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1-val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+    elif(instruction[0] == "MUL.D"):
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1*val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+    else:
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1/val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+        
+def assignVal(value, register, memData, floatData, intData):
+
+    if (register[0] == 'F'):
+        index = int(register[1:])
+        floatData[index][1] = value
+    elif (register[0] == '$'):
+        index = int(register[1:])
+        intData[index][1] = value
+    else:
+        x = register.replace(')', '(')
+        number = x.split('(')
+        if len(number) > 1:
+            memData[int(number[0]) + int(number[1])][1] = value
+            
+def doInstruction(instruction, memData, floatData, intData):
+
+    if(instruction[0] == "L.D"):
+        val = getVal(instruction[2], memData, floatData, intData)
+        assignVal(val, instruction[1], memData, floatData, intData)
+    elif(instruction[0] == "S.D"):
+        val = getVal(instruction[1], memData, floatData, intData)
+        assignVal(val, instruction[2], memData, floatData, intData)
+    elif(instruction[0][0:3] == "ADD"):
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1+val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+    elif(instruction[0][0:3] == "SUB"):
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1-val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+    elif(instruction[0] == "MUL.D"):
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1*val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+    else:
+        val1 = getVal(instruction[2], memData, floatData, intData)
+        val2 = getVal(instruction[3], memData, floatData, intData)
+        sum = val1/val2
+        assignVal(sum, instruction[1], memData, floatData, intData)
+
+def displayRegister(register):
+    x = 0
+    for y in register:
+        print(register[x][0], ":", register[x][1])
+        x = x + 1
+    
+    
+
+def main():
+    memoryData = [["(0)",45],["(1)",12],["(2)",0],["(3)",0],["(4)",10],["(5)",135],["(6)",254],["(7)",127],["(8)",18],["(9)",4],
+                  ["(10)",55],["(11)",8],["(12)",2],["(13)",98],["(14)",13],["(15)",5],["(16)",233],["(17)",158],["(18)",167]]
+
+    floatRegister = []
+    intRegister = []
+    instruction = []
+    readFile(instruction)
+    scoreBoard = []
+    createBoard(instruction, scoreBoard)
+    
+    createRegisters(floatRegister, intRegister)
+    algorithm(scoreBoard, instruction, floatRegister, intRegister, memoryData)
+    print("Instruction Status:")
+    displayBoard(scoreBoard)
+    print()
+    print("Float Register:")
+    displayRegister(floatRegister)
+    print()
+    print("Integer Register:")
+    displayRegister(intRegister)
+    
+    
+main()
